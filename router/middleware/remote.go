@@ -6,6 +6,7 @@ import (
 	"github.com/drone/drone/remote/github"
 	"github.com/drone/drone/remote/gitlab"
 	"github.com/drone/drone/remote/gogs"
+	"github.com/drone/drone/remote/timu"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,8 @@ func Remote() gin.HandlerFunc {
 		remote_ = gitlab.Load(*config)
 	case "bitbucketserver":
 		remote_ = bitbucketserver.Load(*config)
+	case "timu":
+		remote_ = timu.Load(*config)
 	default:
 		logrus.Fatalln("remote configuration not found")
 	}
