@@ -35,9 +35,11 @@ type Timu struct {
 
 func (t *Timu) CompressNounType(nounType string) (string) {
 	if nounType == "core:project" {
-		return "p"
+		return ""
 	} else if nounType == "core:code-module" {
-		return "library"		
+		return ""		
+	} else if nounType == "core:project-module"{
+		return ""
 	} else {
 		return nounType;
 	}
@@ -150,7 +152,13 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
 	nounType := dataItem["type"].(string)
 	nounType = t.CompressNounType(nounType)
 
-	finalName := nounType + "/" + name
+	finalName := ""
+
+	if len(nounType) > 0 {
+		finalName = nounType + "/" + name	
+	} else {
+		finalName = name;
+	}
 
 	container := dataItem["container"].(string);
 	atRoot := false
@@ -172,14 +180,18 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
         	}
         	nounType = containerItem["type"].(string)
         	nounType = t.CompressNounType(nounType)
-        	finalName =  nounType + "/" + containerName + "/" + finalName
+        	if len(nounType) > 0 {
+        		finalName = nounType + "/" + containerName + "/" + finalName
+        	} else {
+        		finalName = containerName + "/" + finalName
+        	}
         	container = containerItem["container"].(string)
 		}
 
 	}
 	
 	// Encode the name
-	finalName = strings.Replace(finalName, "/", ">", -1)
+	finalName = strings.Replace("projects/" + finalName, "/", ">", -1)
 	return finalName
 }
 
@@ -215,7 +227,7 @@ func (t *Timu) Repos(u *model.User) ([]*model.RepoLite, error) {
 	    for i := 0; i < dataSectionLength; i++ {
 	        dataItem := dataSection[i].(map[string]interface{})
 	        log.Debugf("Getting path for library " + dataItem["url"].(string))	        
-        	finalName = t.getLibraryPath(dataItem, references, true)        	
+        	finalName = t.getLibraryPath(dataItem, references, false)        	
 			repos = append(repos, &model.RepoLite{
 				Owner:    "timu",
 				Name:     finalName,
@@ -290,7 +302,7 @@ func (t *Timu) getLibraryFromName(name string) (map[string]interface{}, error) {
 		    // For each library item, compare the names
 		    for i := 0; i < len(dataSection) && !done; i++ {
 		        dataItem := dataSection[i].(map[string]interface{})	        
-	        	finalName = t.getLibraryPath(dataItem, references, true)
+	        	finalName = t.getLibraryPath(dataItem, references, false)
 	        	log.Debugf(name + " " + finalName)
 	        	if strings.Compare(name, finalName) == 0 {
 	        		// If the names match, then this is the library we want
@@ -487,7 +499,7 @@ func (t *Timu) Hook(req *http.Request) (*model.Repo, *model.Build, error) {
         return nil, nil, err
     }
 	references := library["references"];
-	libraryPath := t.getLibraryPath(library, references.(map[string]interface{}), true)
+	libraryPath := t.getLibraryPath(library, references.(map[string]interface{}), false)
 	reponame := libraryPath;
 	adjustedName := strings.Replace(reponame, ">", "/", -1)
 	clone := t.URL + "/" + adjustedName
