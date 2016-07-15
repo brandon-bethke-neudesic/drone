@@ -361,7 +361,11 @@ func (t *Timu) Netrc(u *model.User, r *model.Repo) (*model.Netrc, error) {
 	netrc.Login = u.Token
 	netrc.Password = u.Token
 	url, _ := url.Parse(t.URL);
-	host, _, _ := net.SplitHostPort(url.Host)
+	host := url.Host;
+	// Don't need the port
+	if strings.Contains(url.Host, ":") {
+		host, _, _ = net.SplitHostPort(url.Host)
+	}
 	netrc.Machine =  host;
 	log.Debugf("Allowing host " + netrc.Machine)
 	return netrc, nil
