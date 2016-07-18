@@ -85,7 +85,19 @@ func Load(config string) *Timu {
 // remote user details.
 func (t *Timu) Login(w http.ResponseWriter, r *http.Request) (*model.User, bool, error) {
 	log.Debugf("Timu Login Called")
+	var (
+		//username = r.FormValue("username")
+		password = r.FormValue("password")
+	)
 
+	// if the password doesn't exist we re-direct the user to the login screen.
+	if len(t.AccessToken) == 0 && len(password) == 0 {
+		http.Redirect(w, r, "/login/form", http.StatusSeeOther)
+		return nil, false, nil
+	}
+
+	// username is not necessary, but the password should be a timu oauth access token
+	t.AccessToken = password;
 	timuClient := &TimuClient{ Insecure: t.SkipVerify, AccessToken: t.AccessToken };
 
 	var url = t.API + "/api/graph/me?$network=" + t.Network

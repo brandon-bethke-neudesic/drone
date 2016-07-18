@@ -32,19 +32,18 @@ func (t *TimuClient) Post(url string, content []byte) (JsonData, error) {
         return nil, err
     }        
 
-    if response.StatusCode >= 400 {
-		return nil, errors.New("Error. Status Code: " + strconv.Itoa(response.StatusCode) + ". " + string(body));     	
-    }
-
+    var jsondata JsonData;
     if len(body) > 0 {
-	    var jsondata JsonData;
 	    err = json.Unmarshal(body, &jsondata);
 	    if err != nil {
 	        return nil, err
 	    }    	
-	    return jsondata, nil
     }
-    return nil, nil
+
+    if response.StatusCode >= 400 {
+		return jsondata, errors.New("Error. Status Code: " + strconv.Itoa(response.StatusCode) + ". " + string(body));     	
+    }
+    return jsondata, nil
 }
 
 func (t *TimuClient) Get(url string) (JsonData, error) {
@@ -57,9 +56,15 @@ func (t *TimuClient) Get(url string) (JsonData, error) {
     defer response.Body.Close();
     body, err := ioutil.ReadAll(response.Body)
     var jsondata JsonData;
-    err = json.Unmarshal(body, &jsondata);
-    if err != nil {
-        return nil, err
+    if len(body) > 0 {
+	    err = json.Unmarshal(body, &jsondata);
+	    if err != nil {
+	        return nil, err
+	    }
+	}
+
+    if response.StatusCode >= 400 {
+		return jsondata, errors.New("Error. Status Code: " + strconv.Itoa(response.StatusCode) + ". " + string(body));     	
     }
 
     return jsondata, nil;
