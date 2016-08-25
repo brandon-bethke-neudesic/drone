@@ -10,6 +10,7 @@ import (
     "strings"
     "strconv"
     "errors"
+	"os"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -37,7 +38,7 @@ func (t *Timu) CompressNounType(nounType string) (string) {
 	if nounType == "core:project" {
 		return ""
 	} else if nounType == "core:code-module" {
-		return ""		
+		return ""
 	} else if nounType == "core:project-module"{
 		return ""
 	} else {
@@ -52,7 +53,7 @@ func (t *Timu) ExpandNounType(nounType string) (string) {
 		return "core:code-module"
 	} else {
 		return nounType;
-	}	
+	}
 }
 
 func Load(config string) *Timu {
@@ -99,34 +100,62 @@ func (t *Timu) Login(w http.ResponseWriter, r *http.Request) (*model.User, bool,
 	// username is not necessary, but the password should be a timu oauth access token
 	t.AccessToken = password;
 	timuClient := &TimuClient{ Insecure: t.SkipVerify, AccessToken: t.AccessToken };
-
 	var url = t.API + "/api/graph/me?$network=" + t.Network
 	log.Debugf("URL: " + url)
 	jsondata, err := timuClient.Get(url);
 	if err != nil {
 		return nil, true, err;
 	}
-	user := &model.User{}	
+	profilesSection := jsondata["profiles"].([]interface{})
+	if !isAuthorizedFromUserList(profilesSection) {
+		return nil, false, errors.New("The current user is not allowed")
+	}
+
+	user := &model.User{}
 	user.Email = jsondata["email"].(string)
 	if jsondata["name"] == nil {
-		user.Login = user.Email; 
+		user.Login = user.Email;
 	} else {
-		user.Login = jsondata["name"].(string)		
+		user.Login = jsondata["name"].(string)
 	}
 	user.Token = t.AccessToken
 	user.Secret = t.AccessToken
 	return user, t.Open, nil
 }
 
+func isAuthorizedFromUserList(profiles []interface{}) bool {
+	for pi, _ := range profiles {
+		profileItem := profiles[pi].(map[string]interface{})
+		userId := profileItem["id"].(float64)
+		allowed := os.Getenv("TIMU_ALLOWED_USER_IDS");
+		if len(allowed) == 0 {
+			return false
+		}
+		allowedList := strings.Split(allowed, ",")
+		for _,v := range allowedList {
+			allowedId, err := strconv.ParseFloat(v, 64)
+			if err == nil && allowedId == userId {
+				return true;
+			}
+		}
+		return false
+	}
+	return false;
+}
+
 // Auth authenticates the session and returns the remote user
 // login for the given token and secret
 func (t *Timu) Auth(token, secret string) (string, error) {
-	log.Debugf("Timu Auth Called")	
+	log.Debugf("Timu Auth Called")
 	timuClient := &TimuClient{ Insecure: t.SkipVerify, AccessToken: t.AccessToken  };
 	var url = t.API + "/api/graph/me?$network=" + t.Network
 	jsondata, err := timuClient.Get(url);
 	if err != nil {
 		return "", err;
+	}
+	profilesSection := jsondata["profiles"].([]interface{})
+	if !isAuthorizedFromUserList(profilesSection) {
+		return "", errors.New("The current user is not allowed")
 	}
 
 	return jsondata["name"].(string), nil
@@ -147,7 +176,7 @@ func (t *Timu) Repo(u *model.User, owner string, reponame string) (*model.Repo, 
 	repo.Link = t.URL + "/" + adjustedName
 	repo.Clone = t.URL + "/" + adjustedName + ".git"
 	repo.Branch = "master"
-	repo.IsPrivate = true	
+	repo.IsPrivate = true
 	return repo, nil
 }
 
@@ -167,7 +196,7 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
 	finalName := ""
 
 	if len(nounType) > 0 {
-		finalName = nounType + "/" + name	
+		finalName = nounType + "/" + name
 	} else {
 		finalName = name;
 	}
@@ -177,7 +206,7 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
 	for !atRoot {
 		parentContainer := references[container].(map[string]interface{})
 
-		if parentContainer["type"].(string) == "core:project-module" && 
+		if parentContainer["type"].(string) == "core:project-module" &&
 			references[parentContainer["container"].(string)].(map[string]interface{})["type"].(string) == "core:network" {
 				atRoot = true;
 		} else {
@@ -187,7 +216,7 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
         	if containerItemKey != nil {
         		temp := containerItemKey.(string)
         		if len(temp) > 0 {
-	        		containerName = temp			        			
+	        		containerName = temp
         		}
         	}
         	nounType = containerItem["type"].(string)
@@ -201,7 +230,7 @@ func (t *Timu) getLibraryPath(dataItem map[string]interface{}, references map[st
 		}
 
 	}
-	
+
 	// Encode the name
 	finalName = strings.Replace("projects/" + finalName, "/", ">", -1)
 	return finalName
@@ -238,8 +267,8 @@ func (t *Timu) Repos(u *model.User) ([]*model.RepoLite, error) {
 	    log.Debugf("Found " + strconv.Itoa(dataSectionLength) + " code libraries")
 	    for i := 0; i < dataSectionLength; i++ {
 	        dataItem := dataSection[i].(map[string]interface{})
-	        log.Debugf("Getting path for library " + dataItem["url"].(string))	        
-        	finalName = t.getLibraryPath(dataItem, references, false)        	
+	        log.Debugf("Getting path for library " + dataItem["url"].(string))
+        	finalName = t.getLibraryPath(dataItem, references, false)
 			repos = append(repos, &model.RepoLite{
 				Owner:    "timu",
 				Name:     finalName,
@@ -265,7 +294,7 @@ func (t *Timu) Perm(u *model.User, owner string, reponame string) (*model.Perm, 
 
 func (t *Timu) getLibraryFromId(libraryId string) (map[string]interface{}, error) {
 	var url = t.API + "/api/graph/core:code-module/" + libraryId + "?network=" + t.Network
-	log.Printf(url)	
+	log.Printf(url)
 	timuClient := &TimuClient{ Insecure: t.SkipVerify, AccessToken: t.AccessToken  };
 	jsondata, err := timuClient.Get(url);
 	if err != nil {
@@ -286,7 +315,7 @@ func (t *Timu) getLibraryFromName(name string) (map[string]interface{}, error) {
 	} else {
 		// Get all libraries with the key of libraryKey and determine which library is actually the library we want.
 		var url = t.API + "/api/graph/core:code-module?$key=" + libraryKey + "&size=25&$network=" + t.Network
-		log.Printf(url)	
+		log.Printf(url)
 	    var paging = true;
 	    var done = false;
 	    var result map[string]interface{} = nil;
@@ -313,7 +342,7 @@ func (t *Timu) getLibraryFromName(name string) (map[string]interface{}, error) {
 		    references := jsondata["references"].(map[string]interface{})
 		    // For each library item, compare the names
 		    for i := 0; i < len(dataSection) && !done; i++ {
-		        dataItem := dataSection[i].(map[string]interface{})	        
+		        dataItem := dataSection[i].(map[string]interface{})
 	        	finalName = t.getLibraryPath(dataItem, references, false)
 	        	log.Debugf(name + " " + finalName)
 	        	if strings.Compare(name, finalName) == 0 {
@@ -327,7 +356,7 @@ func (t *Timu) getLibraryFromName(name string) (map[string]interface{}, error) {
 
 		if !done {
 			return nil, errors.New("Could not find the library")
-		}	
+		}
 
 		return result, nil;
 	}
@@ -436,7 +465,7 @@ func (t *Timu) Activate(u *model.User, repo *model.Repo, k *model.Key, link stri
 		return err;
 	}
 
-	return nil	
+	return nil
 }
 
 // Deactivate removes a repository by removing all the post-commit hooks
@@ -450,7 +479,7 @@ func (t *Timu) Deactivate(u *model.User, repo *model.Repo, link string) error {
 	// If the hooks section is empty, then there is nothing to remove.
 	if libraryData["webhooks"] == nil {
 		return nil;
-	} 
+	}
 
 	libraryId := strconv.FormatFloat(libraryData["id"].(float64), 'f', -1, 64)
 
@@ -467,7 +496,7 @@ func (t *Timu) Deactivate(u *model.User, repo *model.Repo, link string) error {
     	if strings.Compare(url1, url2) != 0 {
     		newHooks = append(newHooks, existingHook);
     	} else {
-    		removedItems = true;    		
+    		removedItems = true;
     	}
 	}
 	// If nothing was removed then we don't need to update the hooks.
@@ -506,9 +535,9 @@ func (t *Timu) Hook(req *http.Request) (*model.Repo, *model.Build, error) {
     after := jsondata["after"].(string)
     ref := jsondata["ref"].(string);
     message := jsondata["head_commit"].(map[string]interface{})["message"].(string)
-	branch := strings.TrimPrefix(ref, "refs/heads/")  
+	branch := strings.TrimPrefix(ref, "refs/heads/")
 
-	tempId := jsondata["repository"].(map[string]interface{})["id"].(float64) 
+	tempId := jsondata["repository"].(map[string]interface{})["id"].(float64)
 	libraryId := strconv.FormatFloat(tempId, 'f', -1, 64)
 	library, err := t.getLibraryFromId(libraryId);
     if err != nil {
@@ -527,7 +556,7 @@ func (t *Timu) Hook(req *http.Request) (*model.Repo, *model.Build, error) {
 	repo.Link = clone
 	repo.Clone = clone + ".git"
 	repo.Branch = "master"
-	repo.IsPrivate = true	
+	repo.IsPrivate = true
 
 	build := &model.Build{}
 	build.Event = model.EventPush
