@@ -345,6 +345,9 @@ func PostBuild(c *gin.Context) {
 		return // EXIT NOT TO AVOID THE 0.4 ENGINE CODE BELOW
 	}
 
+	gbls := strings.Split(os.Getenv("PLUGIN_PARAMS"), " ");
+	gbls = append(gbls, os.Getenv("MY_CUSTOM_PARAM"))
+
 	engine_ := engine.FromContext(c)
 	go engine_.Schedule(c.Copy(), &engine.Task{
 		User:      user,
@@ -359,7 +362,7 @@ func PostBuild(c *gin.Context) {
 		System: &model.System{
 			Link:      httputil.GetURL(c.Request),
 			Plugins:   strings.Split(os.Getenv("PLUGIN_FILTER"), " "),
-			Globals:   strings.Split(os.Getenv("PLUGIN_PARAMS"), " "),
+			Globals:   gbls,
 			Escalates: strings.Split(os.Getenv("ESCALATE_FILTER"), " "),
 		},
 	})
